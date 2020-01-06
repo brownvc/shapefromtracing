@@ -78,14 +78,14 @@ inline Vector3 envmap_eval(const EnvironmentMap &envmap,
         auto dv_dxy = Vector2{dv_dlocal_dir_y * local_dir_dx.y,
                               dv_dlocal_dir_y * local_dir_dy.y};
         Vector3 val;
-        get_texture_value(envmap.values, uv, du_dxy, dv_dxy, &val.x);
+        get_texture_value(envmap.values, 0, uv, uv, du_dxy, dv_dxy, &val.x);
         return val;
     } else {
         // TODO: this is too conservative
         auto du_dxy = Vector2{0, 0};
         auto dv_dxy = Vector2{0, 0};
         Vector3 val;
-        get_texture_value(envmap.values, uv, du_dxy, dv_dxy, &val.x);
+        get_texture_value(envmap.values, 0, uv, uv, du_dxy, dv_dxy, &val.x);
         return val;
     }
 }
@@ -125,7 +125,9 @@ inline void d_envmap_eval(const EnvironmentMap &envmap,
     auto d_du_dxy = Vector2{0, 0};
     auto d_dv_dxy = Vector2{0, 0};
     d_get_texture_value(envmap.values,
+						0, 
                         uv,
+						uv,
                         du_dxy,
                         dv_dxy,
                         &d_output.x,

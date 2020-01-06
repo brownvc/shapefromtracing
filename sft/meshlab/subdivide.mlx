@@ -1,0 +1,8 @@
+<!DOCTYPE FilterScript>
+<FilterScript>
+ <filter name="Subdivision Surfaces: Midpoint">
+  <Param type="RichInt" value="1" name="Iterations"/>
+  <Param type="RichAbsPerc" value="0" min="0" name="Threshold" max="3.77537"/>
+  <Param type="RichBool" value="false" name="Selected"/>
+ </filter>
+</FilterScript>

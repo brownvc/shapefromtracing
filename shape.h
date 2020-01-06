@@ -212,7 +212,9 @@ inline SurfacePoint sample_shape(const Shape &shape, int index, const Vector2 &s
         normalized_n,
         Frame(normalized_n), // TODO: phong interpolate this
         Vector3{0, 0, 0}, // TODO: compute proper dpdu
+		index,
         sample, // TODO: give true light source uv
+		Vector2{0, 0}, // tri_uv unimportant
         Vector2{0, 0}, // TODO: inherit derivatives from previous path vertex
         Vector2{0, 0},
         Vector3{0, 0, 0} // color
@@ -237,7 +239,9 @@ inline void d_sample_shape(const Shape &shape, int index, const Vector2 &sample,
     //     v0 + e1 * b1 + e2 * b2,
     //     normalized_n,
     //     Frame(normalized_n),
+	//     index,
     //     sample,
+	//     Vector2{0, 0},
     //     Vector2{0, 0},
     //     Vector2{0, 0},
     //     Vector3{0, 0, 0}};
@@ -385,9 +389,10 @@ inline SurfacePoint intersect_shape(const Shape &shape,
     auto v_dxy = Vector2{0, 0};
     auto t_dxy = Vector2{0, 0};
     auto uvt = intersect(v0, v1, v2, ray, ray_differential, u_dxy, v_dxy, t_dxy);
-    auto u = uvt[0];
-    auto v = uvt[1];
-    auto w = 1.f - (u + v);
+	auto u = clamp(uvt[0], 0.0, 1.0);
+	auto v = clamp(uvt[1], 0.0, 1.0);
+	auto w = clamp(1.f - (u + v), 0.0, 1.0);
+	auto tri_uv = Vector2{ u, v };
     auto t = uvt[2];
     auto uv = w * uvs0 + u * uvs1 + v * uvs2;
     auto hit_pos = ray.org + ray.dir * t;
@@ -470,7 +475,9 @@ inline SurfacePoint intersect_shape(const Shape &shape,
                         geom_normal,
                         frame,
                         dpdu,
+						index,
                         uv,
+						tri_uv,
                         du_dxy,
                         dv_dxy,
                         dn_dx,
@@ -518,9 +525,10 @@ inline void d_intersect_shape(
     auto v_dxy = Vector2{0, 0};
     auto t_dxy = Vector2{0, 0};
     auto uvt = intersect(v0, v1, v2, ray, ray_differential, u_dxy, v_dxy, t_dxy);
-    auto u = uvt[0];
-    auto v = uvt[1];
-    auto w = 1.f - (u + v);
+	auto u = clamp(uvt[0], 0.0, 1.0);
+	auto v = clamp(uvt[1], 0.0, 1.0);
+	auto w = clamp(1.f - (u + v), 0.0, 1.0);
+	//auto tri_uv = Vector2{u, v};
     auto t = uvt[2];
     // uv = w * uvs0 + u * uvs1 + v * uvs2
     // hit_pos = ray.org + ray.dir * t
@@ -602,7 +610,9 @@ inline void d_intersect_shape(
     // point = SurfacePoint{hit_pos,
     //                      geom_normal,
     //                      frame,
+	//						index,
     //                      uv,
+	//                      tri_uv,
     //                      du_dxy,
     //                      dv_dxy,
     //                      dn_dx,

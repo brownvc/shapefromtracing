@@ -107,6 +107,7 @@ PYBIND11_MODULE(redner, m) {
                       int, // height
                       int, // channels
                       int, // num_levels
+					  int, // mesh_colors_resolution
                       ptr<float>>());
 
     py::class_<Texture3>(m, "Texture3")
@@ -115,6 +116,7 @@ PYBIND11_MODULE(redner, m) {
                       int, // height
                       int, // channels
                       int, // num_levels
+					  int, // mesh_colors_resolution
                       ptr<float>>());
 
     py::class_<TextureN>(m, "TextureN")
@@ -123,6 +125,7 @@ PYBIND11_MODULE(redner, m) {
                       int, // height
                       int, // channels
                       int, // num_levels
+					  int, // mesh_colors_resolution
                       ptr<float>>());
 
     py::class_<Material>(m, "Material")
