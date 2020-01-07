@@ -66,6 +66,7 @@ class Material:
         if normal_map is not None and isinstance(normal_map, torch.Tensor):
             normal_map = pyredner.Texture(normal_map)
 
+        '''
         assert((len(diffuse_reflectance.texels.shape) == 1 and diffuse_reflectance.texels.shape[0] == 3) or \
                (len(diffuse_reflectance.texels.shape) == 3 and diffuse_reflectance.texels.shape[2] == 3))
         assert((len(specular_reflectance.texels.shape) == 1 and specular_reflectance.texels.shape[0] == 3) or \
@@ -75,6 +76,7 @@ class Material:
         if normal_map is not None:
             assert((len(normal_map.texels.shape) == 1 and normal_map.texels.shape[0] == 3) or \
                    (len(normal_map.texels.shape) == 3 and normal_map.texels.shape[2] == 3))
+        '''
 
         self.diffuse_reflectance = diffuse_reflectance
         self._specular_reflectance = specular_reflectance

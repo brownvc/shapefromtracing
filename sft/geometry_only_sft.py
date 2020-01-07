@@ -54,7 +54,6 @@ def fibonacci_sphere(samples=1,randomize=True):
 
 def generate_scenes(camLocs,objects,envmap=None):
   scenes = []
-  lights = []
   up = torch.tensor([0.0, 1.0, 0.0])
   offset_factor = 2.0
   light_intensity = 500.0            
@@ -72,7 +71,8 @@ def generate_scenes(camLocs,objects,envmap=None):
     bitangent = torch.cross(normal, tangent)
     bitangent = bitangent.div(torch.norm(bitangent))
 
-    light = pyredner.generate_quad_light(position = camera.position + offset_factor * tangent,
+    lightPos = camera.position + offset_factor * tangent
+    light = pyredner.generate_quad_light(position = lightPos,
                                      look_at = camera0.look_at,
                                      size = torch.tensor([0.1, 0.1]),
                                      intensity = torch.tensor([light_intensity, light_intensity, light_intensity]))
@@ -122,7 +122,8 @@ radius = 1.4
 
 camera0 = pyredner.automatic_camera_placement(target_objects, resolution)
 camLocs = fibonacci_sphere(num_cameras, False)
-target_scenes = generate_scenes(camLocs, target_objects)
+
+target_scenes = generate_scenes(camLocs, target_objects, envmap=None)
 
 # Binary mask
 #target_objects[0].material = pyredner.Material(diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0]))
@@ -153,9 +154,6 @@ def loss_function(renders, targets):
         renders = gaussian_func(renders)
 
         loss += math.pow(2, i + 1) * torch.sum((renders - targets) ** 2)
-
-        temp_targets = targets.permute(0, 2, 3, 1)
-        temp_renders = renders.permute(0, 2, 3, 1)
 
     return loss
 
@@ -206,6 +204,7 @@ for subdiv in range(10):
 
     loss.backward()
     optimizer.step()
+    prev_loss = loss
     i += 1
 
   if (len(optim_objects[0].indices) > face_target):

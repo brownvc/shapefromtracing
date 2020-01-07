@@ -21,7 +21,8 @@ class Texture:
 
     def __init__(self,
                  texels: torch.Tensor,
-                 uv_scale: Optional[torch.Tensor] = None):
+                 uv_scale: Optional[torch.Tensor] = None,
+				 mesh_colors_resolution = 0):
         if uv_scale is None:
             uv_scale = torch.tensor([1.0, 1.0], device = pyredner.get_device())
         assert(texels.dtype == torch.float32)
@@ -29,6 +30,7 @@ class Texture:
         assert(uv_scale.is_contiguous())
         self._texels = texels
         self.uv_scale = uv_scale
+        self.mesh_colors_resolution = mesh_colors_resolution
         self.generate_mipmap()
 
     def generate_mipmap(self):
@@ -85,7 +87,8 @@ class Texture:
         return {
             'texels': self.texels,
             'mipmap': self.mipmap,
-            'uv_scale': self.uv_scale
+            'uv_scale': self.uv_scale,
+			'mesh_colors_resolution': self.mesh_colors_resolution
         }
 
     @classmethod
@@ -94,4 +97,5 @@ class Texture:
         out.texels = state_dict['texels']
         out.mipmap = state_dict['mipmap']
         out.uv_scale = state_dict['uv_scale'].to(torch.device('cpu'))
+        out.mesh_colors_resolution = state_dict['mesh_colors_resolution']
         return out

@@ -26,10 +26,9 @@ def fibonacci_sphere(samples=1,randomize=True):
 
 def generate_scenes(camLocs,objects,envmap=None):
   scenes = []
-  lights = []
   up = torch.tensor([0.0, 1.0, 0.0])
   offset_factor = 2.0
-  light_intensity = 500.0            
+  light_intensity = 5000.0            
 
   for ind, loc in enumerate(camLocs):
     camera = pyredner.Camera(position = camera0.look_at + radius * loc,
@@ -85,10 +84,10 @@ gaussian_func = getGaussianFilter()
 target_objects = pyredner.load_obj('resources/bunny-uv.obj', return_objects=True)
 print(target_objects[0].vertices.shape)
 
-diffuse = pyredner.imread('resources/GroundForest003_COL_VAR1_3K.jpg')
-specular = pyredner.imread('resources/checkerboard.png')
+diffuse = pyredner.imread('resources/wood_diffuse.jpg')
+specular = pyredner.imread('resources/wood_specular.jpg') / 100.0 #None #pyredner.imread('resources/checkerboard.png')
 #normal_map = pyredner.imread('resources/GroundForest003_NRM_3K.jpg', gamma=1.0)
-roughness = None
+roughness = (1.0 - specular) / 10.0
 normal_map = None
 target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map)
 
@@ -113,7 +112,6 @@ for ind, img in enumerate(targets):
   img = img.data.cpu()
   pyredner.imwrite(img, "output/uv-meshcolors/targets/target_" + str(ind) + ".png")
 
-
 num_gaussian_levels = 0
 def loss_function(renders, targets):
   renders = renders.permute(0, 3, 1, 2)
@@ -128,9 +126,6 @@ def loss_function(renders, targets):
 
     loss += math.pow(2, i + 1) * torch.sum((renders - targets) ** 2)
 
-    temp_targets = targets.permute(0, 2, 3, 1)
-    temp_renders = renders.permute(0, 2, 3, 1)
-
   return loss
 
 def model(optim_scenes, num_samples=(64, 64), max_bounces=1):
@@ -142,13 +137,18 @@ res = 3
 texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.3
 diffuse = pyredner.Texture(texels, mesh_colors_resolution=res)
 specular = pyredner.Texture(texels.clone(), mesh_colors_resolution=res)
+texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.8
+roughness = pyredner.Texture(texels, mesh_colors_resolution=res)
 
-target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=None, normal_map=None)
+
+target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=None)
 target_objects[0].material.diffuse_reflectance.texels.requires_grad = True
 target_objects[0].material.specular_reflectance.texels.requires_grad = True
+target_objects[0].material.roughness.texels.requires_grad = True
 
 optimizer = torch.optim.Adam([target_objects[0].material.diffuse_reflectance.texels,
-                              target_objects[0].material.specular_reflectance.texels], lr=1e-2)
+                              target_objects[0].material.specular_reflectance.texels,
+                              target_objects[0].material.roughness.texels], lr=1e-2)
 
 
 prev_loss = 10000000000
@@ -171,6 +171,7 @@ while True:
   optimizer.step()
   target_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
   target_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
-
+  target_objects[0].material.roughness.texels.data.clamp_(0.0, 1.0)
+  prev_loss = loss
   i += 1
 

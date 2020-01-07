@@ -31,3 +31,4 @@ redner.egg-info
 dist
 log.txt
 docs/build
+sft/output

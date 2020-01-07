@@ -52,7 +52,7 @@ def fibonacci_sphere(samples=1,randomize=True):
 
     return points
 
-def generate_scenes(camLocs,objects,envmap=None):
+def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
   scenes = []
   lights = []
   up = torch.tensor([0.0, 1.0, 0.0])
@@ -71,17 +71,21 @@ def generate_scenes(camLocs,objects,envmap=None):
     tangent = tangent.div(torch.norm(tangent))
     bitangent = torch.cross(normal, tangent)
     bitangent = bitangent.div(torch.norm(bitangent))
-
-    light = pyredner.generate_quad_light(position = camera.position + offset_factor * tangent,
+    
+    offsets = [offset_factor * tangent, offset_factor * -tangent, offset_factor * bitangent, offset_factor * -bitangent, 0]
+    lightLocs = [(camera.position + offset) for offset in offsets]
+    #else:
+    #  lightPos = lightLocs[ind]
+    lights = [pyredner.generate_quad_light(position = lightPos,
                                      look_at = camera0.look_at,
                                      size = torch.tensor([0.1, 0.1]),
-                                     intensity = torch.tensor([light_intensity, light_intensity, light_intensity]))
-    
+                                     intensity = torch.tensor([light_intensity, light_intensity, light_intensity])) for lightPos in lightLocs]
     # Camera data for voxel carving
     #print(str(ind) + " " + str(camera.position.data[0].item()) + " " + str(camera.position.data[1].item()) + " " + str(camera.position.data[2].item()) + " " + str(camera.look_at.data[0].item()) + " " + str(camera.look_at.data[1].item()) + " " + str(camera.look_at.data[2].item()))
-
-    scenes.append(pyredner.Scene(camera = camera, objects = [objects[0], light], envmap=envmap))
+    for light in lights:
+        scenes.append(pyredner.Scene(camera = camera, objects = [objects[0], light], envmap=envmap))
   return scenes
+
 
 def getGaussianFilter(kernel_size = 3, sigma = 3, channels = 3):
     x_coord = torch.arange(kernel_size)
@@ -113,16 +117,28 @@ face_target = int(sys.argv[4])
 
 # Load Target model
 target_objects = pyredner.load_obj(target_obj_file, return_objects=True)
-
 print(target_objects[0].vertices.shape)
 
-resolution = (256, 256)
-num_cameras = 32
-radius = 1.4
+#diffuse = pyredner.imread('resources/wood_diffuse.jpg')
+#specular = pyredner.imread('resources/wood_specular.jpg') / 100.0 #None #pyredner.imread('resources/checkerboard.png')
+#normal_map = pyredner.imread('resources/GroundForest003_NRM_3K.jpg', gamma=1.0)
+#roughness = (1.0 - specular) / 10.0
+normal_map = None
+diffuse = torch.tensor([0.7, 0.7, 0.7])
+specular = torch.tensor([0.0, 0.0, 0.0])
+roughness = torch.tensor([0.6])
+target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map)
+
+resolution = (128, 128)
+num_cameras = 8
+radius = 2.0
+
+#camLocs = [torch.tensor([0, 0, 1.0]),torch.tensor([0, 0, 1.0]), torch.tensor([0, 0, 1.0])]
+lightLocs = None #[torch.tensor([0, 0, 2.1]),torch.tensor([1.0, 0, 2.1]), torch.tensor([0, 1.0, 2.2])]
 
 camera0 = pyredner.automatic_camera_placement(target_objects, resolution)
 camLocs = fibonacci_sphere(num_cameras, False)
-target_scenes = generate_scenes(camLocs, target_objects)
+target_scenes = generate_scenes(camLocs, target_objects, None, lightLocs)
 
 # Binary mask
 #target_objects[0].material = pyredner.Material(diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0]))
@@ -154,9 +170,6 @@ def loss_function(renders, targets):
 
         loss += math.pow(2, i + 1) * torch.sum((renders - targets) ** 2)
 
-        temp_targets = targets.permute(0, 2, 3, 1)
-        temp_renders = renders.permute(0, 2, 3, 1)
-
     return loss
 
 
@@ -179,29 +192,34 @@ def geom_model(initial_verts, initial_normals, offsets, optim_objects, use_verte
 use_vertex_offsets = True
 refinemesh = init_obj_file
 face_target = 4000
-res = 3
+res = 1
+
+optim_objects = pyredner.load_obj(refinemesh, return_objects=True)
+print(optim_objects[0].vertices.shape)
+
+# Initial material.
+optim_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=None, normal_map=None)
+optim_objects[0].material.diffuse_reflectance.texels.requires_grad = True
+optim_objects[0].material.specular_reflectance.texels.requires_grad = True
 
 i = 0
-for subdiv in range(10):
+for subdiv in range(4):
   print("Subdivision: ", subdiv)
 
   # Material Optimization
+  print("Material Optimization")
   texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.3
   diffuse = pyredner.Texture(texels, mesh_colors_resolution=res)
   specular = pyredner.Texture(texels.clone(), mesh_colors_resolution=res)
 
-  target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=None, normal_map=None)
-  target_objects[0].material.diffuse_reflectance.texels.requires_grad = True
-  target_objects[0].material.specular_reflectance.texels.requires_grad = True
-
-  optimizer = torch.optim.Adam([target_objects[0].material.diffuse_reflectance.texels,
-                                target_objects[0].material.specular_reflectance.texels], lr=1e-2)
+  optimizer = torch.optim.Adam([optim_objects[0].material.diffuse_reflectance.texels,
+                                optim_objects[0].material.specular_reflectance.texels], lr=1e-2)
 
   prev_loss = 10000000000
   i = 0
   while True:
     optimizer.zero_grad()
-    optim_scenes = generate_scenes(camLocs, target_objects)
+    optim_scenes = generate_scenes(camLocs, optim_objects)
     renders = tex_model(optim_scenes)
     loss = loss_function(renders, targets)
     print('iter: ', i, ' loss:', loss.item())
@@ -215,15 +233,16 @@ for subdiv in range(10):
 
     loss.backward()
     optimizer.step()
-    target_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
-    target_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
+    optim_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
+    optim_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
+    prev_loss = loss
     i += 1
 
 
-
   # Geometry Optimization
-  optim_objects = pyredner.load_obj(refinemesh, return_objects=True)
-  print(optim_objects[0].vertices.shape)
+  #optim_objects = pyredner.load_obj(refinemesh, return_objects=True)
+  #print(optim_objects[0].vertices.shape)
+  print("Geometry optimization")
 
   initial_verts = optim_objects[0].vertices.clone()
   initial_normals = pyredner.compute_vertex_normal(optim_objects[0].vertices, optim_objects[0].indices)
@@ -242,6 +261,10 @@ for subdiv in range(10):
     loss = loss_function(renders, targets)
     print('iter: ', i, ' loss:', loss.item())
 
+    for ind, img in enumerate(renders):
+      img = img.data.cpu()
+      pyredner.imwrite(img, path + "renders/geom_" + str(i) + "_" + str(ind) + ".png")
+
     if loss > prev_loss:
       break
 
@@ -249,12 +272,14 @@ for subdiv in range(10):
 
     loss.backward()
     optimizer.step()
+    prev_loss = loss
     i += 1
 
-  if (len(optim_objects[0].indices) > face_target):
-    simplify(refinemesh, refinemesh, face_target)
-    face_target += 1000
+  #if (len(optim_objects[0].indices) > face_target):
+  #  simplify(refinemesh, refinemesh, face_target)
+  #  face_target += 1000
 
-  refinemesh = path + "models/subdivision_" + str(subdiv) + ".obj"
-  os.system("meshlabserver -i " + path + "models/output_" + str(i - 1) + ".obj" + " -o " + refinemesh + " -s meshlab/subdivide.mlx")
+  #refinemesh = path + "models/subdivision_" + str(subdiv) + ".obj"
+  #os.system("meshlabserver -i " + path + "models/output_" + str(i - 1) + ".obj" + " -o " + refinemesh + " -s meshlab/subdivide.mlx")
   
+pyredner.save_obj(optim_objects[0], path + "models/output_.obj")
