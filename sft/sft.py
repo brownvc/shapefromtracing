@@ -51,13 +51,13 @@ def fibonacci_sphere(samples=1,randomize=True):
         points.append(torch.tensor([x,y,z]))
 
     return points
-
+ 
 def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
   scenes = []
   lights = []
   up = torch.tensor([0.0, 1.0, 0.0])
   offset_factor = 2.0
-  light_intensity = 500.0            
+  light_intensity = 1000.0            
 
   for ind, loc in enumerate(camLocs):
     camera = pyredner.Camera(position = camera0.look_at + radius * loc,
@@ -131,28 +131,22 @@ target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, spec
 
 resolution = (128, 128)
 num_cameras = 8
-radius = 2.0
-
-#camLocs = [torch.tensor([0, 0, 1.0]),torch.tensor([0, 0, 1.0]), torch.tensor([0, 0, 1.0])]
-lightLocs = None #[torch.tensor([0, 0, 2.1]),torch.tensor([1.0, 0, 2.1]), torch.tensor([0, 1.0, 2.2])]
-
+radius = float(sys.argv[5])
+lightLocs = None
 camera0 = pyredner.automatic_camera_placement(target_objects, resolution)
 camLocs = fibonacci_sphere(num_cameras, False)
 target_scenes = generate_scenes(camLocs, target_objects, None, lightLocs)
 
-# Binary mask
-#target_objects[0].material = pyredner.Material(diffuse_reflectance=torch.tensor([1.0, 1.0, 1.0]))
-#mask_scenes = generate_scenes(camLocs, target_objects, envmap)
-
-# Binary mask
-#masks = pyredner.render_albedo(scene = mask_scenes, num_samples = (128, 0))
+max_bounces_targets = 4
+max_bounces_optim = 4
+use_deferred_rendering = False
 
 # Render Targets
-targets = pyredner.render_pathtracing(scene = target_scenes, num_samples = (128, 0), max_bounces=1)
+targets = pyredner.render_pathtracing(scene = target_scenes, num_samples = (128, 0), max_bounces=max_bounces_targets)
 
 for ind, img in enumerate(targets):
   img = img.data.cpu()
-  pyredner.imwrite(img[:,:,0], path + "targets/target_" + str(ind) + ".png")
+  pyredner.imwrite(img, path + "targets/target_" + str(ind) + ".png")
 
 
 
@@ -173,11 +167,14 @@ def loss_function(renders, targets):
     return loss
 
 
-def tex_model(optim_scenes, num_samples=(64, 64), max_bounces=1):
-  renders = pyredner.render_pathtracing(scene = optim_scenes, num_samples=num_samples, max_bounces=max_bounces)
+def tex_model(optim_scenes, deferred, num_samples=(64, 64), max_bounces=1):
+  if deferred:
+    renders = pyredner.render_deferred(scene = optim_scenes)
+  else:
+    renders = pyredner.render_pathtracing(scene = optim_scenes, num_samples=num_samples, max_bounces=max_bounces)
   return renders
 
-def geom_model(initial_verts, initial_normals, offsets, optim_objects, use_vertex_offsets, num_samples=(64, 64), max_bounces=1):
+def geom_model(initial_verts, initial_normals, offsets, optim_objects, use_vertex_offsets, deferred, num_samples=(64, 64), max_bounces=1):
   if use_vertex_offsets: # Vertex optim
     optim_objects[0].vertices = initial_verts + offsets
   else: # Normal optim
@@ -185,7 +182,10 @@ def geom_model(initial_verts, initial_normals, offsets, optim_objects, use_verte
     optim_objects[0].vertices = initial_verts + off * initial_normals
 
   optim_scenes = generate_scenes(camLocs, optim_objects)
-  renders = pyredner.render_pathtracing(scene = optim_scenes, num_samples=num_samples, max_bounces=max_bounces)
+  if deferred:
+    renders = pyredner.render_deferred(scene = optim_scenes)
+  else:
+    renders = pyredner.render_pathtracing(scene = optim_scenes, num_samples=num_samples, max_bounces=max_bounces)
   return renders
 
 
@@ -220,13 +220,17 @@ for subdiv in range(4):
   while True:
     optimizer.zero_grad()
     optim_scenes = generate_scenes(camLocs, optim_objects)
-    renders = tex_model(optim_scenes)
+    renders = tex_model(optim_scenes, use_deferred_rendering, max_bounces=max_bounces_optim)
     loss = loss_function(renders, targets)
     print('iter: ', i, ' loss:', loss.item())
 
     for ind, img in enumerate(renders):
       img = img.data.cpu()
-      pyredner.imwrite(img, path + "renders/render_" + str(i) + "_" + str(ind) + ".png")
+      pyredner.imwrite(img, path + "renders/render_" + str(subdiv) + "_" + str(i) + "_" + str(ind) + ".png")
+
+    # Save the texels to a file.
+    torch.save(optim_objects[0].material.diffuse_reflectance.texels, path + "mesh-colors/diffuse_" + str(subdiv) + "_" + str(i) + ".pt")
+    torch.save(optim_objects[0].material.specular_reflectance.texels, path + "mesh-colors/specular_" + str(subdiv) + "_" + str(i) + ".pt")
 
     if loss > prev_loss:
       break
@@ -240,8 +244,6 @@ for subdiv in range(4):
 
 
   # Geometry Optimization
-  #optim_objects = pyredner.load_obj(refinemesh, return_objects=True)
-  #print(optim_objects[0].vertices.shape)
   print("Geometry optimization")
 
   initial_verts = optim_objects[0].vertices.clone()
@@ -257,18 +259,18 @@ for subdiv in range(4):
   prev_loss = 10000000000
   while True:
     optimizer.zero_grad()
-    renders = geom_model(initial_verts, initial_normals, offsets, optim_objects, use_vertex_offsets)
+    renders = geom_model(initial_verts, initial_normals, offsets, optim_objects, use_vertex_offsets, use_deferred_rendering, max_bounces=max_bounces_optim)
     loss = loss_function(renders, targets)
     print('iter: ', i, ' loss:', loss.item())
 
     for ind, img in enumerate(renders):
       img = img.data.cpu()
-      pyredner.imwrite(img, path + "renders/geom_" + str(i) + "_" + str(ind) + ".png")
+      pyredner.imwrite(img, path + "renders/geom_" + str(subdiv) + "_" + str(i) + "_" + str(ind) + ".png")
 
     if loss > prev_loss:
       break
 
-    pyredner.save_obj(optim_objects[0], path + "models/output_" + str(i) + ".obj")
+    #pyredner.save_obj(optim_objects[0], path + "models/output_" + str(subdiv) + "_" + str(i) + ".obj")
 
     loss.backward()
     optimizer.step()
@@ -281,5 +283,5 @@ for subdiv in range(4):
 
   #refinemesh = path + "models/subdivision_" + str(subdiv) + ".obj"
   #os.system("meshlabserver -i " + path + "models/output_" + str(i - 1) + ".obj" + " -o " + refinemesh + " -s meshlab/subdivide.mlx")
-  
-pyredner.save_obj(optim_objects[0], path + "models/output_.obj")
+pyredner.save_obj(optim_objects[0], path + "models/output_" + str(subdiv) + "_" + str(i) + ".obj")
+#pyredner.save_obj(optim_objects[0], path + "models/output_.obj")

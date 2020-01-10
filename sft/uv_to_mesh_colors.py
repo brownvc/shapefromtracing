@@ -85,24 +85,19 @@ target_objects = pyredner.load_obj('resources/bunny-uv.obj', return_objects=True
 print(target_objects[0].vertices.shape)
 
 diffuse = pyredner.imread('resources/wood_diffuse.jpg')
-specular = pyredner.imread('resources/wood_specular.jpg') / 100.0 #None #pyredner.imread('resources/checkerboard.png')
+specular = pyredner.imread('resources/wood_specular.jpg') / 100.0
 #normal_map = pyredner.imread('resources/GroundForest003_NRM_3K.jpg', gamma=1.0)
 roughness = (1.0 - specular) / 10.0
 normal_map = None
 target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map)
 
 resolution = (256, 256)
-num_cameras = 1
+num_cameras = 32
 radius = 1.0
 
 camera0 = pyredner.automatic_camera_placement(target_objects, resolution)
 camLocs = fibonacci_sphere(num_cameras, False)
-camLocs = [torch.tensor([0.0, 0.0, -1.0])]
-
-#envmap_img = pyredner.imread('grace-new.exr')
-#envmap = pyredner.EnvironmentMap(envmap_img * 10.0) # *10 to make the image brighter
 target_scenes = generate_scenes(camLocs, target_objects)
-
 
 
 pyredner.render_pytorch.print_timing = False
@@ -137,18 +132,16 @@ res = 3
 texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.3
 diffuse = pyredner.Texture(texels, mesh_colors_resolution=res)
 specular = pyredner.Texture(texels.clone(), mesh_colors_resolution=res)
-texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.8
-roughness = pyredner.Texture(texels, mesh_colors_resolution=res)
+#texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.8
+#roughness = pyredner.Texture(texels, mesh_colors_resolution=res)
 
-
-target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=None)
+target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=None, normal_map=None)
 target_objects[0].material.diffuse_reflectance.texels.requires_grad = True
 target_objects[0].material.specular_reflectance.texels.requires_grad = True
-target_objects[0].material.roughness.texels.requires_grad = True
+#target_objects[0].material.roughness.texels.requires_grad = True
 
 optimizer = torch.optim.Adam([target_objects[0].material.diffuse_reflectance.texels,
-                              target_objects[0].material.specular_reflectance.texels,
-                              target_objects[0].material.roughness.texels], lr=1e-2)
+                              target_objects[0].material.specular_reflectance.texels], lr=1e-2)
 
 
 prev_loss = 10000000000
@@ -164,14 +157,14 @@ while True:
     img = img.data.cpu()
     pyredner.imwrite(img, "output/uv-meshcolors/renders/render_" + str(i) + "_" + str(ind) + ".png")
 
-  if loss > prev_loss:
-    break
+  #if loss > prev_loss:
+    #break
 
   loss.backward()
   optimizer.step()
   target_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
   target_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
-  target_objects[0].material.roughness.texels.data.clamp_(0.0, 1.0)
+  #target_objects[0].material.roughness.texels.data.clamp_(0.0, 1.0)
   prev_loss = loss
   i += 1
 

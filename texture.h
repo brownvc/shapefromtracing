@@ -4,6 +4,7 @@
 #include "vector.h"
 #include "ptr.h"
 #include "atomic.h"
+#include "assert.h"
 
 template <int N>
 struct Texture {
@@ -241,7 +242,9 @@ inline void mesh_colors_interp(const Texture<N> &tex,
 	if (w_x + w_y + w_z < epsilon) {
 		for (int i = 0; i < channels; i++) {
 			output[i] = tex.texels[channels * mc_ind2 + i];
+            assert(isfinite(output[i]));
 		}
+        return;
 	}
 
 	if (w_x + w_y + w_z < 2.0 - epsilon) {
@@ -251,6 +254,7 @@ inline void mesh_colors_interp(const Texture<N> &tex,
 			auto c_ij = tex.texels[channels * mc_ind2 + i];
 
 			output[i] = w_x * c_i1j + w_y * c_ij1 + w_z * c_ij;
+            assert(isfinite(output[i]));
 		}
 	}
 	else {
@@ -262,6 +266,7 @@ inline void mesh_colors_interp(const Texture<N> &tex,
 			auto c_i1j1 = tex.texels[channels * mc_ind2 + i];
 
 			output[i] = (1.0 - w_x) * c_ij1 + (1.0 - w_y) * c_i1j + (1.0 - w_z) * c_i1j1;
+            assert(isfinite(output[i]));
 		}
 	}
 }
@@ -298,6 +303,10 @@ inline void d_mesh_colors_interp(const Texture<N> &tex,
 		get_mesh_colors_index(tri_id, r, i + 1, j + 1);
 
 	for (int i = 0; i < channels; i++) {
+        assert(isfinite(d_output[i] * w_x));
+        assert(isfinite(d_output[i] * w_y));
+        assert(isfinite(d_output[i] * w_z));
+
 		atomic_add(&d_tex.texels[channels * mc_ind0 + i], d_output[i] * w_x);
 		atomic_add(&d_tex.texels[channels * mc_ind1 + i], d_output[i] * w_y);
 		atomic_add(&d_tex.texels[channels * mc_ind2 + i], d_output[i] * w_z);
