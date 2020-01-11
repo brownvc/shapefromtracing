@@ -59,7 +59,7 @@ print("DISTANCE 1->2:", torch.sum(v12_mins))
 print("DISTANCE 2->1:", torch.sum(v21_mins))
 
 # F1 distance is the harmonic mean of the precision and the recall.
-threshold = 0.01
+threshold = 10e-4
 precision = 100.0 * (v21_mins[v21_mins < threshold].shape[0]) / verts2.shape[0]
 recall = 100.0 * (v12_mins[v12_mins < threshold].shape[0]) / verts1.shape[0]
 print("precision:", precision)

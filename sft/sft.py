@@ -54,10 +54,9 @@ def fibonacci_sphere(samples=1,randomize=True):
  
 def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
   scenes = []
-  lights = []
   up = torch.tensor([0.0, 1.0, 0.0])
-  offset_factor = 2.0
-  light_intensity = 1000.0            
+  offset_factor = 10.0
+  light_intensity = 80000.0            
 
   for ind, loc in enumerate(camLocs):
     camera = pyredner.Camera(position = camera0.look_at + radius * loc,
@@ -72,7 +71,7 @@ def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
     bitangent = torch.cross(normal, tangent)
     bitangent = bitangent.div(torch.norm(bitangent))
     
-    offsets = [offset_factor * tangent, offset_factor * -tangent, offset_factor * bitangent, offset_factor * -bitangent, 0]
+    offsets = [offset_factor * tangent, offset_factor * -tangent, offset_factor * bitangent, offset_factor * -bitangent, offset_factor * normal]
     lightLocs = [(camera.position + offset) for offset in offsets]
     #else:
     #  lightPos = lightLocs[ind]
@@ -129,7 +128,7 @@ specular = torch.tensor([0.0, 0.0, 0.0])
 roughness = torch.tensor([0.6])
 target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map)
 
-resolution = (128, 128)
+resolution = (64, 64)
 num_cameras = 8
 radius = float(sys.argv[5])
 lightLocs = None
@@ -138,7 +137,7 @@ camLocs = fibonacci_sphere(num_cameras, False)
 target_scenes = generate_scenes(camLocs, target_objects, None, lightLocs)
 
 max_bounces_targets = 4
-max_bounces_optim = 4
+max_bounces_optim = 2
 use_deferred_rendering = False
 
 # Render Targets
@@ -189,9 +188,8 @@ def geom_model(initial_verts, initial_normals, offsets, optim_objects, use_verte
   return renders
 
 
-use_vertex_offsets = True
+use_vertex_offsets = False
 refinemesh = init_obj_file
-face_target = 4000
 res = 1
 
 optim_objects = pyredner.load_obj(refinemesh, return_objects=True)
@@ -205,7 +203,7 @@ optim_objects[0].material.specular_reflectance.texels.requires_grad = True
 i = 0
 for subdiv in range(4):
   print("Subdivision: ", subdiv)
-
+  '''
   # Material Optimization
   print("Material Optimization")
   texels = torch.zeros([target_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.3
@@ -242,7 +240,7 @@ for subdiv in range(4):
     prev_loss = loss
     i += 1
 
-
+  '''
   # Geometry Optimization
   print("Geometry optimization")
 
@@ -255,7 +253,7 @@ for subdiv in range(4):
     offsets = torch.zeros(initial_verts.shape[0], device=pyredner.get_device(), requires_grad=True)
 
   #lr = 0.0001 / 2^subdiv_level
-  optimizer = torch.optim.Adam([offsets], lr=0.0001)
+  optimizer = torch.optim.Adam([offsets], lr=0.001)
   prev_loss = 10000000000
   while True:
     optimizer.zero_grad()
@@ -264,13 +262,16 @@ for subdiv in range(4):
     print('iter: ', i, ' loss:', loss.item())
 
     for ind, img in enumerate(renders):
+      diff = torch.abs(img - targets[ind])
       img = img.data.cpu()
+      diff = diff.data.cpu()
+      pyredner.imwrite(diff, path + "renders/diff_" + str(subdiv) + "_" + str(i) + "_" + str(ind) + ".png")
       pyredner.imwrite(img, path + "renders/geom_" + str(subdiv) + "_" + str(i) + "_" + str(ind) + ".png")
 
-    if loss > prev_loss:
-      break
+#    if torch.abs(loss - prev_loss) < 0.1:
+#      break
 
-    #pyredner.save_obj(optim_objects[0], path + "models/output_" + str(subdiv) + "_" + str(i) + ".obj")
+    pyredner.save_obj(optim_objects[0], path + "models/output_" + str(subdiv) + "_" + str(i) + ".obj")
 
     loss.backward()
     optimizer.step()
