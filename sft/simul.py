@@ -209,16 +209,15 @@ for subdiv in range(100):
   #texels = torch.zeros([optim_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.8
   #roughness = pyredner.Texture(texels, mesh_colors_resolution=res)
 
-  optim_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=None)
+  optim_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=None, roughness=None, normal_map=None)
   optim_objects[0].material.diffuse_reflectance.texels.requires_grad = True
-  optim_objects[0].material.specular_reflectance.texels.requires_grad = True
+  #optim_objects[0].material.specular_reflectance.texels.requires_grad = True
   #optim_objects[0].material.roughness.texels.requires_grad = True
 
-  optimizer = torch.optim.Adam([optim_objects[0].material.diffuse_reflectance.texels,
-                                optim_objects[0].material.specular_reflectance.texels], lr=0.01)
+  optimizer = torch.optim.Adam([optim_objects[0].material.diffuse_reflectance.texels], lr=0.01)
 
   prev_loss = 10000000000
-  for mat_ind in range(200):
+  for mat_ind in range(100):
     optimizer.zero_grad()
     optim_scenes = generate_scenes(camLocs, optim_objects)
     renders = tex_model(optim_scenes)
@@ -236,17 +235,17 @@ for subdiv in range(100):
     loss.backward()
     optimizer.step()
     optim_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
-    optim_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
+    #optim_objects[0].material.specular_reflectance.texels.data.clamp_(0.0, 1.0)
     #optim_objects[0].material.roughness.texels.data.clamp_(0.0, 1.0)
     prev_loss = loss
     i += 1
 
   optim_objects[0].material.diffuse_reflectance.texels.detach()
-  optim_objects[0].material.specular_reflectance.texels.detach()
+  #optim_objects[0].material.specular_reflectance.texels.detach()
   #optim_objects[0].material.roughness.texels.detach()
 
   torch.save(optim_objects[0].material.diffuse_reflectance.texels, path + "mesh-colors/diffuse_" + str(subdiv) + ".pt")
-  torch.save(optim_objects[0].material.specular_reflectance.texels, path + "mesh-colors/specular_" + str(subdiv) + ".pt")
+  #torch.save(optim_objects[0].material.specular_reflectance.texels, path + "mesh-colors/specular_" + str(subdiv) + ".pt")
   #torch.save(optim_objects[0].material.roughness.texels, path + "mesh-colors/roughness_" + str(subdiv) + ".pt")
 
   #optim_objects[0].material.diffuse_reflectance.texels = torch.load(path + "mesh-colors/diffuse.pt")
