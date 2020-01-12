@@ -9,5 +9,5 @@ output = sys.argv[2]
 
 from subprocess import call
 call(["ffmpeg", "-framerate", "24", "-i",
-    path + "render_%d_0.png", "-vb", "20M",
+    path + "texture_%d.png", "-vb", "20M",
     output])

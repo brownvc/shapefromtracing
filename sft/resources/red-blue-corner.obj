@@ -1,0 +1,18 @@
+# Blender v2.79 (sub 0) OBJ File: 'workspace.blend'
+# www.blender.org
+mtllib red-blue-corner.mtl
+o Cube
+v -0.967729 -0.968145 0.961916
+v -0.945451 -0.968145 -0.829876
+v -0.955582 0.968145 0.048066
+v 0.825249 -0.968145 0.939386
+v -0.065530 0.968145 0.946841
+v 0.832870 -0.968145 -0.825438
+v -0.070436 0.968145 0.037136
+usemtl Blue_Diffuse
+s off
+f 6 7 5 4
+usemtl Red_Diffuse
+f 2 3 7 6
+usemtl White_Diffuse
+f 2 6 4 1

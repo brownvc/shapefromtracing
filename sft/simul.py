@@ -118,8 +118,8 @@ face_max = int(sys.argv[5])
 target_objects = pyredner.load_obj(target_obj_file, return_objects=True)
 print(target_objects[0].vertices.shape)
 
-diffuse = pyredner.imread('resources/wood_diffuse.jpg')
-specular_uv = pyredner.imread('resources/wood_specular.jpg') / 100.0
+diffuse = pyredner.imread('resources/wood_diffuse_low_res.jpg')
+specular_uv = pyredner.imread('resources/wood_specular_low_res.jpg') / 100.0
 roughness = (1.0 - specular_uv) / 10.0
 normal_map = None
 target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular_uv, roughness=roughness, normal_map=normal_map)
@@ -194,7 +194,7 @@ print(optim_objects[0].vertices.shape)
 
 
 i = 0
-for subdiv in range(10):
+for subdiv in range(100):
   print("Subdivision: ", subdiv)
 
   # Material Optimization
@@ -205,8 +205,6 @@ for subdiv in range(10):
   diffuse = pyredner.Texture(texels, mesh_colors_resolution=res)
   specular = pyredner.Texture(texels.clone(), mesh_colors_resolution=res)
   roughness = (1.0 - specular_uv) / 10.0
-
-  print("after roughness")
 
   #texels = torch.zeros([optim_objects[0].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 0.8
   #roughness = pyredner.Texture(texels, mesh_colors_resolution=res)
@@ -228,7 +226,7 @@ for subdiv in range(10):
     print('iter: ', i, ' loss:', loss.item())
 
     for ind, img in enumerate(renders):
-      if ind == 19:
+      if ind == 5:
         img = img.data.cpu()
         pyredner.imwrite(img, path + "renders/render_" + str(i) + ".png")
 
@@ -278,7 +276,7 @@ for subdiv in range(10):
     print('iter: ', i, ' loss:', loss.item())
 
     for ind, img in enumerate(renders):
-      if (ind == 19):
+      if (ind == 5):
         img = img.data.cpu()
         pyredner.imwrite(img, path + "renders/geom_" + str(i) + ".png")
 
