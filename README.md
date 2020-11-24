@@ -1,3 +1,6 @@
+Shape From Tracing:
+This code is based on the Redner differentiable pathtracer.
+
 # redner: Differentiable rendering without approximation
 
 ![](https://people.csail.mit.edu/tzumao/diffrt/teaser.jpg)
@@ -92,3 +95,5 @@ The current development plan is to enhance the renderer. Following features will
 
 If you have any questions/comments/bug reports, feel free to open a github issue or e-mail to the author
 Tzu-Mao Li (tzumao@mit.edu)
+=======
+# shapefromtracing
