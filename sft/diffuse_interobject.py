@@ -4,6 +4,9 @@ import math
 import os
 import sys
 
+import warnings
+warnings.simplefilter("ignore")
+
 pyredner.render_pytorch.print_timing = False
 
 def simplify(inputmesh, outputmesh, target):
@@ -51,12 +54,17 @@ def fibonacci_sphere(samples=1,randomize=True):
         points.append(torch.tensor([x,y,z]))
 
     return points
- 
+envmap_cathedral = pyredner.imread('resources/grace-new.exr')
+envmap_cathedral = torch.ones(envmap_cathedral.shape, device=pyredner.get_device())
+if pyredner.get_use_gpu():
+    envmap_cathedral = envmap_cathedral.cuda()
+envmap_cathedral = pyredner.EnvironmentMap(envmap_cathedral)
+
 def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
   scenes = []
   up = torch.tensor([0.0, 1.0, 0.0])
   offset_factor = 0.0
-  light_intensity = 250.0            
+  light_intensity = 100.0            
 
   for ind, loc in enumerate(camLocs):
     camera = pyredner.Camera(position = loc,
@@ -73,17 +81,16 @@ def generate_scenes(camLocs,objects,envmap=None, lightLocs=None):
     
     offsets = [offset_factor * tangent]
     lightLocs = [(camera.position + offset) for offset in offsets]
-
-
+    
     lights = [pyredner.generate_quad_light(position = lightPos,
                                      look_at = camera0.look_at,
                                      size = torch.tensor([0.1, 0.1]),
                                      intensity = torch.tensor([light_intensity, light_intensity, light_intensity])) for lightPos in lightLocs]
 
     scene_objects = objects
-    objects.append(lights[0])
+    #objects.append(lights[0])
 
-    scenes.append(pyredner.Scene(camera = camera, objects = scene_objects, envmap=None))
+    scenes.append(pyredner.Scene(camera = camera, objects = [objects[0], objects[1], objects[2], lights[0]], envmap=None))
   return scenes
 
 
@@ -121,17 +128,17 @@ print(target_objects)
 
 normal_map = None
 diffuse = torch.tensor([0.7, 0.0, 0.0])
-specular = torch.tensor([0.0, 0.0, 0.0])
+specular_target = torch.tensor([0.0, 0.0, 0.0])
 roughness = torch.tensor([0.6])
 
 diffuse = torch.tensor([0.0, 0.0, 1.0])
-target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map, two_sided=True)
+target_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular_target, roughness=roughness, normal_map=normal_map, two_sided=True)
 
 diffuse = torch.tensor([1.0, 0.0, 0.0])
-target_objects[1].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map, two_sided=True)
+target_objects[1].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular_target, roughness=roughness, normal_map=normal_map, two_sided=True)
 
-diffuse = torch.tensor([1.0, 1.0, 1.0])
-target_objects[2].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map, two_sided=True)
+diffuse = torch.tensor([0.7,0.7,0.7])
+target_objects[2].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular_target, roughness=roughness, normal_map=normal_map, two_sided=True)
 
 resolution = (256, 256)
 num_cameras = 2
@@ -143,8 +150,7 @@ camLocs = [torch.tensor([-0.1, 0.1, 0.1])]
 target_scenes = generate_scenes(camLocs, target_objects, None, lightLocs)
 
 max_bounces_targets = 4
-max_bounces_optim = 1
-use_deferred_rendering = False
+max_bounces_optim = 4
 
 # Render Targets
 targets = pyredner.render_pathtracing(scene = target_scenes, num_samples = (512, 0), max_bounces=max_bounces_targets)
@@ -152,29 +158,19 @@ targets = pyredner.render_pathtracing(scene = target_scenes, num_samples = (512,
 for ind, img in enumerate(targets):
   img = img.data.cpu()
   pyredner.imwrite(img, path + "targets/target_" + str(ind) + ".png")
+  #target_data = pyredner.imread( path + "targets/target_" + str(ind) + ".png")
+  #targets[ind] = target_data
+
 
 target_texture = pyredner.render_albedo(scene = target_scenes, num_samples = (512, 0))
 
 for ind, img in enumerate(target_texture):
+  mask = img.clone()
+  mask = mask.sum(2)/3
+  mask[mask < 0.8] = 0.0
+  mask = torch.stack([mask, mask, mask], dim=2)
   img = img.data.cpu()
   pyredner.imwrite(img, path + "targets/texture_" + str(ind) + ".png")
-
-num_gaussian_levels = 0
-def loss_function(renders, targets):
-    renders = renders.permute(0, 3, 1, 2)
-    targets = targets.permute(0, 3, 1, 2)
-
-    loss = 0
-    loss = torch.sum((renders - targets) ** 2)
-
-    for i in range(num_gaussian_levels):
-        targets = gaussian_func(targets)
-        renders = gaussian_func(renders)
-
-        loss += math.pow(2, i + 1) * torch.sum((renders - targets) ** 2)
-
-    return loss
-
 
 def tex_model(optim_scenes, num_samples=(64, 64), max_bounces=1):
     return pyredner.render_pathtracing(scene = optim_scenes, num_samples=num_samples, max_bounces=max_bounces)
@@ -185,37 +181,60 @@ res = 3
 
 i = 0
 print("Material Optimization")
+specular_render = torch.tensor([0.0, 0.0, 0.0])
+optim_objects = pyredner.load_obj(target_obj_file, return_objects=True)
 
-optim_objects = target_objects
+'''
+diffuse = torch.tensor([0.0, 0.0, 1.0])
+optim_objects[0].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map, two_sided=True)
+
+diffuse = torch.tensor([1.0, 0.0, 0.0])
+optim_objects[1].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=normal_map, two_sided=True)
+'''
 
 # Material Optimization
 params = []
 for ind, obj in enumerate(optim_objects):
+    
     #obj.material.diffuse_reflectance.texels = torch.tensor([0.5, 0.5, 0.5])
-    if (ind == 2):
-        obj.material.diffuse_reflectance.texels = torch.tensor([1.0, 0.8, 1.0])
-        #obj.material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=None)
-        obj.material.diffuse_reflectance.texels.requires_grad = True
-        params.append(obj.material.diffuse_reflectance.texels)
+    texels = torch.zeros([optim_objects[ind].indices.shape[0] * int(((res + 1) * (res + 2)) / 2) * 3], device = pyredner.get_device()) + 1.0
+    diffuse = pyredner.Texture(texels, mesh_colors_resolution=res)
+    
+    optim_objects[ind].material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular_render, roughness=roughness, normal_map=normal_map, two_sided=True)
+    #obj.material = pyredner.Material(diffuse_reflectance=diffuse, specular_reflectance=specular, roughness=roughness, normal_map=None)
+    params.append(optim_objects[ind].material.diffuse_reflectance.texels.clone())
+    params[ind].requires_grad = True
 
 optimizer = torch.optim.Adam(params, lr=1e-2)
 
 prev_loss = 10000000000
 i = 0
-while True:
+while i < 1000:
     optimizer.zero_grad()
-    renders = tex_model(target_scenes, num_samples=(64, 64), max_bounces=max_bounces_optim)
-    loss = loss_function(renders, targets)
-    print('iter: ', i, ' loss:', loss.item())
 
-    textures = pyredner.render_albedo(target_scenes, num_samples=(64, 0))
+    for ind, obj in enumerate(optim_objects):
+        with torch.no_grad():
+            params[ind].clamp_(0.0,1.0)
+        optim_objects[ind].material.diffuse_reflectance.texels = params[ind]
+
+    optim_scenes = generate_scenes(camLocs, optim_objects)
+    
+    renders = tex_model(optim_scenes, num_samples=(512, 512), max_bounces=max_bounces_optim)
+    loss = (renders[0] - targets[0]).pow(2).sum()
+    #loss = (((renders[0] / (renders[0] + 1.0)) - (targets[0] / (targets[0] + 1.0))) ).pow(2).sum()
+
+    print('iter: ', i, ' loss:', loss.item())
+    with torch.no_grad():
+        textures = pyredner.render_albedo(optim_scenes, num_samples=(64, 0))
 
     for ind, img in enumerate(renders):
         img = img.data.cpu()
-        pyredner.imwrite(img, path + "renders/render_" + str(i) + ".png")
+        #img = (img / (img + 1.0))
+        pyredner.imwrite( img, path + "renders/render_" + str(i) + ".png")
 
     for ind, img in enumerate(textures):
         img = img.data.cpu()
+        #img = (img / (img + 1.0))
         pyredner.imwrite(img, path + "renders/texture_" + str(i) + ".png")
 
     # Save the texels to a file.
@@ -224,14 +243,24 @@ while True:
 
     loss.backward()
     optimizer.step()
-    
+    #optim_objects[0].material.diffuse_reflectance.texels.data.clamp_(0.0,1.0)
+    #optim_objects[1].material.diffuse_reflectance.texels.data.clamp_(0.0,1.0)
+    #optim_objects[2].material.diffuse_reflectance.texels.data.clamp_(0.0,1.0)
+
     texture_diff = torch.sum((target_texture[0] - textures[0]) ** 2)
     
     print("Texture difference:", texture_diff)
 
-    for obj in optim_objects:
-        obj.material.diffuse_reflectance.texels.data.clamp_(0.0, 1.0)
-
     prev_loss = loss
     i += 1
- 
+
+resolution = (512, 512)
+num_cameras = 2
+lightLocs = None
+camera0 = pyredner.automatic_camera_placement(optim_objects, resolution)
+camLocs = [torch.tensor([-0.1, 0.1, 0.1])]
+target_scenes = generate_scenes(camLocs, optim_objects, None, lightLocs)
+renders = tex_model(optim_scenes, num_samples=(64, 0), max_bounces=1)
+pyredner.imwrite( renders[0].data.cpu(), path + "renders/final_4bounce.png")
+textures = pyredner.render_albedo(optim_scenes, num_samples=(64, 0))
+pyredner.imwrite(textures[0].data.cpu(), path + "renders/final_texture_4bounce.png")
