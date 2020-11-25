@@ -1,4 +1,4 @@
-README coming soon!
+This code release is in progress; thanks for your patience!
 
 Please note that our code was built off a fork of the Redner Differentiable Path tracer. Our files will be found at sft/
 
